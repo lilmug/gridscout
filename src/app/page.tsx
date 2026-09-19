@@ -1,69 +1,228 @@
-import Image from "next/image";
+"use client";
+
+import { FormEvent, useState } from "react";
+
+type ProjectStatus = "Screening" | "In progress" | "On hold";
+
+type Project = {
+  id: number;
+  name: string;
+  technology: string;
+  capacity: number;
+  location: string;
+  status: ProjectStatus;
+};
+
+const initialProjects: Project[] = [
+  {
+    id: 1,
+    name: "North Ridge Solar",
+    technology: "Solar PV",
+    capacity: 48,
+    location: "Occitanie, France",
+    status: "Screening",
+  },
+  {
+    id: 2,
+    name: "Green Valley Wind",
+    technology: "Onshore wind",
+    capacity: 72,
+    location: "Brittany, France",
+    status: "In progress",
+  },
+];
+
+const statusStyles: Record<ProjectStatus, string> = {
+  Screening: "bg-amber-100 text-amber-800",
+  "In progress": "bg-emerald-100 text-emerald-800",
+  "On hold": "bg-slate-100 text-slate-700",
+};
 
 export default function Home() {
+  const [projects, setProjects] = useState(initialProjects);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+
+  function addProject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const project: Project = {
+      id: Date.now(),
+      name: String(formData.get("name")),
+      technology: String(formData.get("technology")),
+      capacity: Number(formData.get("capacity")),
+      location: String(formData.get("location")),
+      status: String(formData.get("status")) as ProjectStatus,
+    };
+
+    setProjects((currentProjects) => [project, ...currentProjects]);
+    event.currentTarget.reset();
+    setIsFormOpen(false);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-[#f5f7f6] text-slate-950">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-10">
+          <div>
+            <p className="text-xl font-semibold tracking-tight text-emerald-950">
+              GridScout
+            </p>
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
+              Connection intelligence
+            </p>
+          </div>
+          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">
+            Portfolio workspace
+          </span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      </header>
+
+      <div className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
+        <div className="mb-10 flex flex-col justify-between gap-6 md:flex-row md:items-end">
+          <div>
+            <p className="mb-3 text-sm font-medium text-emerald-700">Overview</p>
+            <h1 className="text-4xl font-semibold tracking-tight text-slate-950">
+              Renewable projects
+            </h1>
+            <p className="mt-3 max-w-xl text-slate-600">
+              Keep your portfolio organized and prepare each project for grid
+              connection assessment.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsFormOpen((open) => !open)}
+            className="rounded-lg bg-emerald-800 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
           >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            {isFormOpen ? "Close form" : "Add project"}
+          </button>
         </div>
-      </main>
-    </div>
+
+        {isFormOpen && (
+          <form
+            onSubmit={addProject}
+            className="mb-8 rounded-xl border border-emerald-100 bg-white p-6 shadow-sm"
+          >
+            <h2 className="text-lg font-semibold">New project</h2>
+            <div className="mt-5 grid gap-5 md:grid-cols-2 lg:grid-cols-5">
+              <label className="text-sm font-medium text-slate-700">
+                Project name
+                <input
+                  required
+                  name="name"
+                  className="form-input"
+                  placeholder="e.g. Atlantic Solar"
+                />
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Technology
+                <select required name="technology" className="form-input">
+                  <option>Solar PV</option>
+                  <option>Onshore wind</option>
+                  <option>Battery storage</option>
+                  <option>Hydro</option>
+                </select>
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Capacity (MW)
+                <input
+                  required
+                  min="0"
+                  step="0.1"
+                  type="number"
+                  name="capacity"
+                  className="form-input"
+                  placeholder="0"
+                />
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Location
+                <input
+                  required
+                  name="location"
+                  className="form-input"
+                  placeholder="Region, country"
+                />
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Status
+                <select required name="status" className="form-input">
+                  <option>Screening</option>
+                  <option>In progress</option>
+                  <option>On hold</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="submit"
+                className="rounded-lg bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Save project
+              </button>
+            </div>
+          </form>
+        )}
+
+        <section className="grid gap-4 sm:grid-cols-3">
+          <div className="metric-card">
+            <p className="metric-label">Projects</p>
+            <p className="metric-value">{projects.length}</p>
+          </div>
+          <div className="metric-card">
+            <p className="metric-label">Total capacity</p>
+            <p className="metric-value">
+              {projects.reduce((total, project) => total + project.capacity, 0)}{" "}
+              <span className="text-lg font-medium text-slate-500">MW</span>
+            </p>
+          </div>
+          <div className="metric-card">
+            <p className="metric-label">Ready for assessment</p>
+            <p className="metric-value">
+              {projects.filter((project) => project.status === "Screening").length}
+            </p>
+          </div>
+        </section>
+
+        <section className="mt-10 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-6 py-5">
+            <h2 className="font-semibold">Portfolio projects</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Select a project later to explore its connection pathways.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-6 py-4 font-medium">Project</th>
+                  <th className="px-6 py-4 font-medium">Technology</th>
+                  <th className="px-6 py-4 font-medium">Capacity</th>
+                  <th className="px-6 py-4 font-medium">Location</th>
+                  <th className="px-6 py-4 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {projects.map((project) => (
+                  <tr key={project.id} className="transition hover:bg-slate-50">
+                    <td className="px-6 py-5 font-semibold">{project.name}</td>
+                    <td className="px-6 py-5 text-slate-600">{project.technology}</td>
+                    <td className="px-6 py-5 text-slate-600">{project.capacity} MW</td>
+                    <td className="px-6 py-5 text-slate-600">{project.location}</td>
+                    <td className="px-6 py-5">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${statusStyles[project.status]}`}
+                      >
+                        {project.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
   );
 }
