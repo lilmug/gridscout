@@ -1,36 +1,14 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-
-type ProjectStatus = "Screening" | "In progress" | "On hold";
-
-type Project = {
-  id: number;
-  name: string;
-  technology: string;
-  capacity: number;
-  location: string;
-  status: ProjectStatus;
-};
-
-const initialProjects: Project[] = [
-  {
-    id: 1,
-    name: "North Ridge Solar",
-    technology: "Solar PV",
-    capacity: 48,
-    location: "Occitanie, France",
-    status: "Screening",
-  },
-  {
-    id: 2,
-    name: "Green Valley Wind",
-    technology: "Onshore wind",
-    capacity: 72,
-    location: "Brittany, France",
-    status: "In progress",
-  },
-];
+import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
+import { type Project, type ProjectStatus } from "@/app/data/projects";
+import { frenchRegions } from "@/app/data/regions";
+import {
+  loadProjects,
+  PROJECTS_CHANGED_EVENT,
+  saveProject,
+} from "@/app/data/projectStorage";
 
 const statusStyles: Record<ProjectStatus, string> = {
   Screening: "bg-amber-100 text-amber-800",
@@ -38,9 +16,27 @@ const statusStyles: Record<ProjectStatus, string> = {
   "On hold": "bg-slate-100 text-slate-700",
 };
 
+const euro = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 0,
+});
+
 export default function Home() {
-  const [projects, setProjects] = useState(initialProjects);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  // The browser storage is loaded after hydration so the server-rendered shell stays stable.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setProjects(loadProjects());
+    const refreshProjects = () => setProjects(loadProjects());
+    window.addEventListener(PROJECTS_CHANGED_EVENT, refreshProjects);
+    window.addEventListener("focus", refreshProjects);
+    return () => {
+      window.removeEventListener(PROJECTS_CHANGED_EVENT, refreshProjects);
+      window.removeEventListener("focus", refreshProjects);
+    };
+  }, []);
 
   function addProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -51,10 +47,16 @@ export default function Home() {
       technology: String(formData.get("technology")),
       capacity: Number(formData.get("capacity")),
       location: String(formData.get("location")),
+      connectionRegion: String(formData.get("region")),
+      developer: String(formData.get("developer")),
+      targetCommissioningDate: String(formData.get("targetCommissioningDate")),
+      notes: String(formData.get("notes")),
       status: String(formData.get("status")) as ProjectStatus,
+      coordinates: [46.6034, 1.8883],
     };
 
     setProjects((currentProjects) => [project, ...currentProjects]);
+    saveProject(project);
     event.currentTarget.reset();
     setIsFormOpen(false);
   }
@@ -104,7 +106,7 @@ export default function Home() {
             className="mb-8 rounded-xl border border-emerald-100 bg-white p-6 shadow-sm"
           >
             <h2 className="text-lg font-semibold">New project</h2>
-            <div className="mt-5 grid gap-5 md:grid-cols-2 lg:grid-cols-5">
+            <div className="mt-5 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
               <label className="text-sm font-medium text-slate-700">
                 Project name
                 <input
@@ -136,14 +138,12 @@ export default function Home() {
                 />
               </label>
               <label className="text-sm font-medium text-slate-700">
-                Location
-                <input
-                  required
-                  name="location"
-                  className="form-input"
-                  placeholder="Region, country"
-                />
+                Location<input required name="location" className="form-input" placeholder="Commune, department" />
               </label>
+              <label className="text-sm font-medium text-slate-700">French region<select required name="region" className="form-input"><option value="">Select region</option>{frenchRegions.map((region) => <option key={region}>{region}</option>)}</select></label>
+              <label className="text-sm font-medium text-slate-700">Developer<input name="developer" className="form-input" /></label>
+              <label className="text-sm font-medium text-slate-700">Target commissioning<input type="date" name="targetCommissioningDate" className="form-input" /></label>
+              <label className="text-sm font-medium text-slate-700 md:col-span-2 lg:col-span-4">Notes<textarea name="notes" className="form-input min-h-20" /></label>
               <label className="text-sm font-medium text-slate-700">
                 Status
                 <select required name="status" className="form-input">
@@ -200,12 +200,17 @@ export default function Home() {
                   <th className="px-6 py-4 font-medium">Capacity</th>
                   <th className="px-6 py-4 font-medium">Location</th>
                   <th className="px-6 py-4 font-medium">Status</th>
+                  <th className="px-6 py-4 font-medium">CAPEX grid</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {projects.map((project) => (
                   <tr key={project.id} className="transition hover:bg-slate-50">
-                    <td className="px-6 py-5 font-semibold">{project.name}</td>
+                    <td className="px-6 py-5 font-semibold">
+                      <Link href={`/projects/${project.id}`} className="hover:text-emerald-700">
+                        {project.name}
+                      </Link>
+                    </td>
                     <td className="px-6 py-5 text-slate-600">{project.technology}</td>
                     <td className="px-6 py-5 text-slate-600">{project.capacity} MW</td>
                     <td className="px-6 py-5 text-slate-600">{project.location}</td>
@@ -215,6 +220,15 @@ export default function Home() {
                       >
                         {project.status}
                       </span>
+                    </td>
+                    <td className="px-6 py-5">
+                      {typeof project.gridCapexEstimate === "number" ? (
+                        <span className="font-medium text-emerald-700">
+                          {euro.format(project.gridCapexEstimate)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">Not calculated</span>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 
 @theme inline {
   --font-sans: var(--font-geist-sans);
@@ -23,4 +24,19 @@ body {
 
 .metric-value {
   @apply mt-2 text-3xl font-semibold tracking-tight text-slate-950;
+}
+
+.legend-dot {
+  @apply mr-1.5 inline-block h-2.5 w-2.5 rounded-full;
+}
+
+.project-technology-icon {
+  align-items: center;
+  background: white;
+  border: 2px solid #047857;
+  border-radius: 9999px;
+  display: flex;
+  font-size: 20px;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgb(15 23 42 / 25%);
 }
