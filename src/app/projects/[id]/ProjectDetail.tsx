@@ -117,7 +117,9 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
         selectedSubstationCode: updatedScenario?.selectedSubstationCode,
       };
       setProject(updatedProject);
-      persistProject(updatedProject);
+      void persistProject(updatedProject).catch((error: unknown) => {
+        console.error("Unable to persist scenario changes.", error);
+      });
       return next;
     });
   }
@@ -150,28 +152,47 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
     setHasProjectLocation(true);
     setSelectedSubstation(null);
     setRouteCoordinates([]);
-    updateActiveScenario({ distanceKm: 0, selectedSubstationCode: undefined, gridCapexEstimate: undefined });
+    const updatedProject = {
+      ...project,
+      coordinates: nextCoordinates,
+      locationSelected: true,
+      distanceToSubstationKm: undefined,
+      selectedSubstationCode: undefined,
+      gridCapexEstimate: undefined,
+      scenarios: scenarios.map((scenario) =>
+        scenario.id === activeScenario.id
+          ? { ...scenario, distanceKm: 0, selectedSubstationCode: undefined, gridCapexEstimate: undefined }
+          : scenario,
+      ),
+    };
+    void persistProject(updatedProject).catch((error: unknown) => {
+      console.error("Unable to persist project location.", error);
+    });
     setRouteStatus("idle");
     setProject((current) => {
-      const updated = {
-        ...current,
-        coordinates: nextCoordinates,
-        locationSelected: true,
-        distanceToSubstationKm: undefined,
-        selectedSubstationCode: undefined,
-        gridCapexEstimate: undefined,
-      };
-      persistProject(updated);
-      return updated;
+      return updatedProject;
     });
-  }, []);
+  }, [activeScenario.id, project, scenarios]);
 
   const handleSubstationSelect = useCallback((substation: RteSubstation) => {
     setSelectedSubstation(substation);
-    updateActiveScenario({ connectionRegion: "Grand Est" });
+    const updatedProject = {
+      ...project,
+      selectedSubstationCode: substation.code,
+      scenarios: scenarios.map((scenario) =>
+        scenario.id === activeScenario.id
+          ? { ...scenario, selectedSubstationCode: substation.code, connectionRegion: "Grand Est" }
+          : scenario,
+      ),
+    };
+    setProject(updatedProject);
+    setScenarios(updatedProject.scenarios);
+    void persistProject(updatedProject).catch((error: unknown) => {
+      console.error("Unable to persist selected substation.", error);
+    });
     setRouteStatus("loading");
     setRouteError("");
-  }, []);
+  }, [activeScenario.id, project, scenarios]);
 
   useEffect(() => {
     if (!selectedSubstation) return;
@@ -298,7 +319,7 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_360px]">
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-6 py-5"><h2 className="font-semibold">Location and grid context</h2><p className="mt-1 text-sm text-slate-500">Grand Est RTE substations are shown in blue. Select a location and a substation to calculate the road route.</p></div>
-            <ProjectMap name={project.name} technology={project.technology} coordinates={coordinates} hasProjectLocation={hasProjectLocation} selectedSubstationCode={selectedSubstation?.code} onLocationChange={handleLocationChange} onSubstationSelect={handleSubstationSelect} routeCoordinates={routeCoordinates} />
+            <ProjectMap name={project.name} technology={project.technology} coordinates={coordinates} hasProjectLocation={hasProjectLocation} selectedSubstationCode={selectedSubstation?.code ?? project.selectedSubstationCode} onLocationChange={handleLocationChange} onSubstationSelect={handleSubstationSelect} routeCoordinates={routeCoordinates} />
           </section>
           <aside className="h-fit rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="font-semibold">Project summary</h2>
@@ -306,7 +327,7 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
               <div className="flex justify-between py-3"><dt className="text-slate-500">Technology</dt><dd className="font-medium">{project.technology}</dd></div>
               <div className="flex justify-between py-3"><dt className="text-slate-500">Capacity</dt><dd className="font-medium">{project.capacity} MW</dd></div>
               <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Authorization expected</dt><dd className="text-right font-medium">{project.targetAuthorizationDate || "Not specified"}</dd></div>
-              <div className="flex justify-between py-3"><dt className="text-slate-500">Selected RTE post</dt><dd className="max-w-[150px] text-right font-medium">{selectedSubstation?.name ?? "Not selected"}</dd></div>
+              <div className="flex justify-between py-3"><dt className="text-slate-500">Selected RTE post</dt><dd className="max-w-[150px] text-right font-medium">{selectedSubstation?.name ?? project.selectedSubstationCode ?? "Not selected"}</dd></div>
               <div className="flex justify-between py-3"><dt className="text-slate-500">Road distance</dt><dd className="font-medium">{(activeScenario?.distanceKm ?? 0) > 0 ? `${activeScenario?.distanceKm} km` : "Not calculated"}</dd></div>
               <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Coordinates</dt><dd className="text-right font-medium">{coordinates[1].toFixed(5)}, {coordinates[0].toFixed(5)}</dd></div>
             </dl>
