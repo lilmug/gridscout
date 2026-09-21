@@ -209,7 +209,7 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coordinates, selectedSubstation]);
 
-  function saveProject(event: FormEvent<HTMLFormElement>) {
+  async function saveProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const updated = {
@@ -236,17 +236,17 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
           : scenario,
       ),
     };
-    setProject(updatedWithScenario);
-    setScenarios(updatedWithScenario.scenarios);
-    void persistProject(updatedWithScenario)
-      .then(() => {
-        setSaved(true);
-        window.setTimeout(() => setSaved(false), 2500);
-      })
-      .catch((error: unknown) => {
-        console.error("Unable to save project details.", error);
-        setRouteError("Impossible d’enregistrer le projet dans la base de données.");
-      });
+    try {
+      await persistProject(updatedWithScenario);
+      setProject(updatedWithScenario);
+      setScenarios(updatedWithScenario.scenarios);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2500);
+    } catch (error: unknown) {
+      console.error("Unable to save project details.", error);
+      setRouteError("Impossible d’enregistrer le projet dans la base de données.");
+      return;
+    }
     setIsEditing(false);
   }
 

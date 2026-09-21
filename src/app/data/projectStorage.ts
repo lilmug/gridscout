@@ -43,7 +43,10 @@ export async function saveProject(project: Project) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(project),
     });
-    if (!response.ok) throw new Error(`Project save failed (${response.status})`);
+    if (!response.ok) {
+      const details = await response.text();
+      throw new Error(`Project save failed (${response.status}): ${details}`);
+    }
     window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
   } catch (error) {
     console.error("Unable to save shared project.", error);
