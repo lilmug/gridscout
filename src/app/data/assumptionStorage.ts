@@ -24,8 +24,20 @@ export function loadAssumptions() {
       window.localStorage.getItem(QUOTE_PARTS_KEY) ?? "null",
     ) as RegionalQuotePart[] | null;
 
+    const cables = Array.isArray(storedCables)
+      ? defaultCableAssumptions.map((fallback) => {
+          const stored = storedCables.find((item) => item.id === fallback.id);
+          if (!stored) return fallback;
+          const legacyCost = (stored as CableAssumption & { costPerKm?: number }).costPerKm;
+          return {
+            ...fallback,
+            ruralCostPerKm: stored.ruralCostPerKm ?? legacyCost ?? fallback.ruralCostPerKm,
+            urbanCostPerKm: stored.urbanCostPerKm ?? legacyCost ?? fallback.urbanCostPerKm,
+          };
+        })
+      : defaultCableAssumptions;
     return {
-      cables: Array.isArray(storedCables) ? storedCables : defaultCableAssumptions,
+      cables,
       quoteParts: Array.isArray(storedQuoteParts) ? storedQuoteParts : defaultRegionalQuoteParts,
     };
   } catch (error) {

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import type { Project, ProjectStatus } from "@/app/data/projects";
+import type { GridCapexScenario, Project, ProjectStatus } from "@/app/data/projects";
 import { loadAssumptions } from "@/app/data/assumptionStorage";
+import { defaultCableAssumptions, defaultRegionalQuoteParts } from "@/app/data/assumptions";
 import { frenchRegions } from "@/app/data/regions";
 import { loadProjects, saveProject as persistProject } from "@/app/data/projectStorage";
 import ProjectMap, { type RteSubstation } from "./ProjectMap";
@@ -16,16 +17,31 @@ const euro = new Intl.NumberFormat("fr-FR", {
 
 type ProjectDetailProps = { initialProject: Project };
 
+function createScenario(project: Project, index = 1): GridCapexScenario {
+  return {
+    id: `scenario-${project.id}-${Date.now()}-${index}`,
+    name: `Scenario ${index}`,
+    distanceKm: project.distanceToSubstationKm ?? 0,
+    connectionCapacityMw: project.connectionCapacityMw ?? project.capacity,
+    cableId: project.cableType?.startsWith("mt-") ? project.cableType : "mt-alu-95",
+    connectionRegion: project.connectionRegion ?? "",
+    ruralPercentage: 50,
+    urbanPercentage: 50,
+    gridCapexEstimate: project.gridCapexEstimate,
+    selectedSubstationCode: project.selectedSubstationCode,
+  };
+}
+
 export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
   const [project, setProject] = useState(initialProject);
   const [isEditing, setIsEditing] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [distance, setDistance] = useState(project.distanceToSubstationKm ?? 0);
-  const [connectionCapacity, setConnectionCapacity] = useState(
-    project.connectionCapacityMw ?? project.capacity,
+  const [scenarios, setScenarios] = useState<GridCapexScenario[]>(
+    () => project.scenarios ?? [createScenario(project)],
   );
-  const [cableType, setCableType] = useState(project.cableType ?? "hvac");
-  const [region, setRegion] = useState(project.connectionRegion ?? "");
+  const [activeScenarioId, setActiveScenarioId] = useState(
+    () => project.scenarios?.[0]?.id ?? "",
+  );
   const [coordinates, setCoordinates] = useState(project.coordinates);
   const [hasProjectLocation, setHasProjectLocation] = useState(
     project.locationSelected ?? false,
@@ -34,8 +50,8 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
   const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
   const [routeStatus, setRouteStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [routeError, setRouteError] = useState("");
-  const [cables] = useState(() => loadAssumptions().cables);
-  const [quoteParts] = useState(() => loadAssumptions().quoteParts);
+  const [cables, setCables] = useState(defaultCableAssumptions);
+  const [quoteParts, setQuoteParts] = useState(defaultRegionalQuoteParts);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -44,27 +60,95 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
     if (stored) {
       setProject(stored);
       setCoordinates(stored.coordinates);
-      setDistance(stored.distanceToSubstationKm ?? 0);
-      setConnectionCapacity(stored.connectionCapacityMw ?? stored.capacity);
-      setCableType(stored.cableType ?? "hvac");
-      setRegion(stored.connectionRegion ?? "");
+      const storedScenarios = stored.scenarios ?? [createScenario(stored)];
+      setScenarios(storedScenarios);
+      setActiveScenarioId(storedScenarios[0].id);
     }
+    const assumptions = loadAssumptions();
+    setCables(assumptions.cables);
+    setQuoteParts(assumptions.quoteParts);
   }, [initialProject.id]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const selectedCable = cables.find((cable) => cable.id === cableType);
-  const selectedQuotePart = quoteParts.find((item) => item.region === region);
-  const quotePartCost = (selectedQuotePart?.quotePartPerMw ?? 0) * connectionCapacity;
-  const cableCost = (selectedCable?.costPerKm ?? 0) * distance;
+  const activeScenario = scenarios.find((scenario) => scenario.id === activeScenarioId) ?? scenarios[0]!;
+  const selectedCable = cables.find((cable) => cable.id === activeScenario?.cableId);
+  const selectedQuotePart = quoteParts.find((item) => item.region === activeScenario?.connectionRegion);
+  const ruralDistance = (activeScenario?.distanceKm ?? 0) * ((activeScenario?.ruralPercentage ?? 0) / 100);
+  const urbanDistance = (activeScenario?.distanceKm ?? 0) * ((activeScenario?.urbanPercentage ?? 0) / 100);
+  const quotePartCost = (selectedQuotePart?.quotePartPerMw ?? 0) * (activeScenario?.connectionCapacityMw ?? 0);
+  const cableCost =
+    (selectedCable?.ruralCostPerKm ?? 0) * ruralDistance +
+    (selectedCable?.urbanCostPerKm ?? 0) * urbanDistance;
   const totalCapex = quotePartCost + cableCost;
-  const assumptionsConfigured = Boolean(selectedQuotePart?.quotePartPerMw && selectedCable?.costPerKm);
+  const assumptionsConfigured = Boolean(
+    selectedQuotePart?.quotePartPerMw &&
+    selectedCable?.ruralCostPerKm &&
+    selectedCable.urbanCostPerKm,
+  );
+
+  function updateActiveScenario(patch: Partial<GridCapexScenario>) {
+    setScenarios((current) => {
+      const next = current.map((scenario) => {
+        if (scenario.id !== activeScenario.id) return scenario;
+        const updated = { ...scenario, ...patch };
+        const cable = cables.find((item) => item.id === updated.cableId);
+        const quotePart = quoteParts.find((item) => item.region === updated.connectionRegion);
+        const ruralDistanceKm = updated.distanceKm * updated.ruralPercentage / 100;
+        const urbanDistanceKm = updated.distanceKm * updated.urbanPercentage / 100;
+        return {
+          ...updated,
+          gridCapexEstimate:
+            (quotePart?.quotePartPerMw ?? 0) * updated.connectionCapacityMw +
+            (cable?.ruralCostPerKm ?? 0) * ruralDistanceKm +
+            (cable?.urbanCostPerKm ?? 0) * urbanDistanceKm,
+        };
+      });
+      const updatedScenario = next.find((scenario) => scenario.id === activeScenario.id);
+      const updatedProject = {
+        ...project,
+        scenarios: next,
+        gridCapexEstimate: updatedScenario?.gridCapexEstimate,
+        distanceToSubstationKm: updatedScenario?.distanceKm,
+        connectionCapacityMw: updatedScenario?.connectionCapacityMw,
+        cableType: updatedScenario?.cableId,
+        connectionRegion: updatedScenario?.connectionRegion,
+        selectedSubstationCode: updatedScenario?.selectedSubstationCode,
+      };
+      setProject(updatedProject);
+      persistProject(updatedProject);
+      return next;
+    });
+  }
+
+  function changeRuralPercentage(value: number) {
+    const ruralPercentage = Math.min(100, Math.max(0, value));
+    updateActiveScenario({ ruralPercentage, urbanPercentage: 100 - ruralPercentage });
+  }
+
+  function addScenario() {
+    const nextScenario = createScenario(project, scenarios.length + 1);
+    setScenarios((current) => {
+      const next = [...current, nextScenario];
+      persistProject({ ...project, scenarios: next });
+      return next;
+    });
+    setActiveScenarioId(nextScenario.id);
+  }
+
+  function removeActiveScenario() {
+    if (scenarios.length === 1) return;
+    const next = scenarios.filter((scenario) => scenario.id !== activeScenario.id);
+    setScenarios(next);
+    setActiveScenarioId(next[0].id);
+    persistProject({ ...project, scenarios: next });
+  }
 
   const handleLocationChange = useCallback((nextCoordinates: [number, number]) => {
     setCoordinates(nextCoordinates);
     setHasProjectLocation(true);
     setSelectedSubstation(null);
     setRouteCoordinates([]);
-    setDistance(0);
+    updateActiveScenario({ distanceKm: 0, selectedSubstationCode: undefined, gridCapexEstimate: undefined });
     setRouteStatus("idle");
     setProject((current) => {
       const updated = {
@@ -82,7 +166,7 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
 
   const handleSubstationSelect = useCallback((substation: RteSubstation) => {
     setSelectedSubstation(substation);
-    setRegion("Grand Est");
+    updateActiveScenario({ connectionRegion: "Grand Est" });
     setRouteStatus("loading");
     setRouteError("");
   }, []);
@@ -103,29 +187,12 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
       .then((data: { routes?: Array<{ distance: number; geometry: { coordinates: [number, number][] } }> }) => {
         const route = data.routes?.[0];
         if (!route) throw new Error("No drivable route was found.");
-        setDistance(Number((route.distance / 1000).toFixed(1)));
+        const distanceKm = Number((route.distance / 1000).toFixed(1));
         setRouteCoordinates(route.geometry.coordinates.map(([longitude, latitude]) => [latitude, longitude]));
-        setProject((current) => ({
-          ...current,
-          coordinates,
-          locationSelected: true,
-          distanceToSubstationKm: Number((route.distance / 1000).toFixed(1)),
+        updateActiveScenario({
+          distanceKm,
           selectedSubstationCode: selectedSubstation.code,
           connectionRegion: "Grand Est",
-          gridCapexEstimate:
-            (selectedQuotePart?.quotePartPerMw ?? 0) * connectionCapacity +
-            (selectedCable?.costPerKm ?? 0) * Number((route.distance / 1000).toFixed(1)),
-        }));
-        persistProject({
-          ...project,
-          coordinates,
-          locationSelected: true,
-          distanceToSubstationKm: Number((route.distance / 1000).toFixed(1)),
-          selectedSubstationCode: selectedSubstation.code,
-          connectionRegion: "Grand Est",
-          gridCapexEstimate:
-            (selectedQuotePart?.quotePartPerMw ?? 0) * connectionCapacity +
-            (selectedCable?.costPerKm ?? 0) * Number((route.distance / 1000).toFixed(1)),
         });
         setRouteStatus("ready");
       })
@@ -159,7 +226,7 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
       notes: String(formData.get("notes")),
     };
     setProject(updated);
-    setRegion(updated.connectionRegion);
+    updateActiveScenario({ connectionRegion: updated.connectionRegion });
     persistProject(updated);
     setIsEditing(false);
     setSaved(true);
@@ -221,24 +288,54 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
               <div className="flex justify-between py-3"><dt className="text-slate-500">Technology</dt><dd className="font-medium">{project.technology}</dd></div>
               <div className="flex justify-between py-3"><dt className="text-slate-500">Capacity</dt><dd className="font-medium">{project.capacity} MW</dd></div>
               <div className="flex justify-between py-3"><dt className="text-slate-500">Selected RTE post</dt><dd className="max-w-[150px] text-right font-medium">{selectedSubstation?.name ?? "Not selected"}</dd></div>
-              <div className="flex justify-between py-3"><dt className="text-slate-500">Road distance</dt><dd className="font-medium">{distance > 0 ? `${distance} km` : "Not calculated"}</dd></div>
+              <div className="flex justify-between py-3"><dt className="text-slate-500">Road distance</dt><dd className="font-medium">{(activeScenario?.distanceKm ?? 0) > 0 ? `${activeScenario?.distanceKm} km` : "Not calculated"}</dd></div>
               <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Coordinates</dt><dd className="text-right font-medium">{coordinates[1].toFixed(5)}, {coordinates[0].toFixed(5)}</dd></div>
             </dl>
           </aside>
         </div>
 
         <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start"><div><p className="text-sm font-medium text-emerald-700">Scenario model</p><h2 className="mt-1 text-2xl font-semibold">Grid connection CAPEX estimate</h2><p className="mt-2 text-sm text-slate-500">Quote-part × connection capacity + cable cost per km × distance to substation.</p></div><div className="rounded-lg bg-slate-950 px-5 py-4 text-white"><p className="text-xs uppercase tracking-wide text-slate-300">Estimated CAPEX</p><p className="mt-1 text-2xl font-semibold">{euro.format(totalCapex)}</p></div></div>
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+            <div>
+              <p className="text-sm font-medium text-emerald-700">Scenario model</p>
+              <h2 className="mt-1 text-2xl font-semibold">Grid connection CAPEX estimate</h2>
+              <p className="mt-2 text-sm text-slate-500">Quote-part × connection capacity + cable cost by rural/urban distance.</p>
+            </div>
+            <div className="rounded-lg bg-slate-950 px-5 py-4 text-white">
+              <p className="text-xs uppercase tracking-wide text-slate-300">Estimated CAPEX</p>
+              <p className="mt-1 text-2xl font-semibold">{euro.format(totalCapex)}</p>
+            </div>
+          </div>
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            <select
+              value={activeScenario.id}
+              onChange={(event) => setActiveScenarioId(event.target.value)}
+              className="form-input mt-0 sm:max-w-xs"
+              aria-label="Scénario CAPEX"
+            >
+              {scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name}</option>)}
+            </select>
+            <button type="button" onClick={addScenario} className="rounded-lg border border-emerald-700 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-50">Nouveau scénario</button>
+            <button type="button" onClick={removeActiveScenario} disabled={scenarios.length === 1} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Supprimer</button>
+          </div>
+          <label className="mt-4 block max-w-md text-sm font-medium text-slate-700">
+            Nom du scénario
+            <input value={activeScenario.name} onChange={(event) => updateActiveScenario({ name: event.target.value })} className="form-input" />
+          </label>
           {!assumptionsConfigured && <p className="mt-5 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">Configure the selected region and cable cost in Admin before treating this estimate as meaningful.</p>}
           <div className="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-            <label className="text-sm font-medium text-slate-700">Connection region<select value={region} onChange={(event) => setRegion(event.target.value)} className="form-input"><option value="">Select region</option>{quoteParts.map((item) => <option key={item.region}>{item.region}</option>)}</select></label>
-            <label className="text-sm font-medium text-slate-700">Distance to substation (km)<input type="number" min="0" step="0.1" value={distance} onChange={(event) => setDistance(Number(event.target.value))} className="form-input" /></label>
-            <label className="text-sm font-medium text-slate-700">Capacity to connect (MW)<input type="number" min="0" step="0.1" value={connectionCapacity} onChange={(event) => setConnectionCapacity(Number(event.target.value))} className="form-input" /></label>
-            <label className="text-sm font-medium text-slate-700">Cable type<select value={cableType} onChange={(event) => setCableType(event.target.value)} className="form-input">{cables.map((cable) => <option key={cable.id} value={cable.id}>{cable.label}</option>)}</select></label>
+            <label className="text-sm font-medium text-slate-700">Connection region<select value={activeScenario?.connectionRegion ?? ""} onChange={(event) => updateActiveScenario({ connectionRegion: event.target.value })} className="form-input"><option value="">Select region</option>{quoteParts.map((item) => <option key={item.region}>{item.region}</option>)}</select></label>
+            <label className="text-sm font-medium text-slate-700">Distance to substation (km)<input type="number" min="0" step="0.1" value={activeScenario?.distanceKm ?? 0} onChange={(event) => updateActiveScenario({ distanceKm: Number(event.target.value) })} className="form-input" /></label>
+            <label className="text-sm font-medium text-slate-700">Capacity to connect (MW)<input type="number" min="0" step="0.1" value={activeScenario?.connectionCapacityMw ?? 0} onChange={(event) => updateActiveScenario({ connectionCapacityMw: Number(event.target.value) })} className="form-input" /></label>
+            <label className="text-sm font-medium text-slate-700">Cable type<select value={activeScenario?.cableId ?? ""} onChange={(event) => updateActiveScenario({ cableId: event.target.value })} className="form-input">{cables.map((cable) => <option key={cable.id} value={cable.id}>{cable.label}</option>)}</select></label>
+          </div>
+          <div className="mt-5 grid gap-5 md:grid-cols-2">
+            <label className="text-sm font-medium text-slate-700">Part rurale (%)<input type="number" min="0" max="100" step="1" value={activeScenario?.ruralPercentage ?? 0} onChange={(event) => changeRuralPercentage(Number(event.target.value))} className="form-input" /></label>
+            <label className="text-sm font-medium text-slate-700">Part urbaine (%)<input type="number" min="0" max="100" step="1" value={activeScenario?.urbanPercentage ?? 0} onChange={(event) => changeRuralPercentage(100 - Number(event.target.value))} className="form-input" /></label>
           </div>
           {selectedSubstation && <p className="mt-4 text-sm text-slate-600">Selected post: <strong>{selectedSubstation.name}</strong>{selectedSubstation.remainingCapacityMw !== null && ` · ${selectedSubstation.remainingCapacityMw} MW remaining capacity`}{routeStatus === "loading" && " · calculating road route…"}</p>}
           {routeStatus === "error" && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800">{routeError}</p>}
-          <div className="mt-6 grid gap-3 border-t border-slate-100 pt-5 text-sm md:grid-cols-3"><div><p className="text-slate-500">Quote-part contribution</p><p className="mt-1 font-semibold">{euro.format(quotePartCost)}</p></div><div><p className="text-slate-500">Cable contribution</p><p className="mt-1 font-semibold">{euro.format(cableCost)}</p></div><div><p className="text-slate-500">Applied assumptions</p><p className="mt-1 font-semibold">{selectedQuotePart?.quotePartPerMw ?? 0} €/MW · {selectedCable?.costPerKm ?? 0} €/km</p></div></div>
+          <div className="mt-6 grid gap-3 border-t border-slate-100 pt-5 text-sm md:grid-cols-3"><div><p className="text-slate-500">Quote-part contribution</p><p className="mt-1 font-semibold">{euro.format(quotePartCost)}</p></div><div><p className="text-slate-500">Cable contribution</p><p className="mt-1 font-semibold">{euro.format(cableCost)}</p></div><div><p className="text-slate-500">Applied assumptions</p><p className="mt-1 font-semibold">{selectedQuotePart?.quotePartPerMw ?? 0} €/MW · {selectedCable?.ruralCostPerKm ?? 0} €/km rural · {selectedCable?.urbanCostPerKm ?? 0} €/km urbain</p></div></div>
         </section>
       </div>
     </main>

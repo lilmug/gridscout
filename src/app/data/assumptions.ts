@@ -1,7 +1,10 @@
 export type CableAssumption = {
   id: string;
   label: string;
-  costPerKm: number;
+  material: "Aluminium" | "Cuivre";
+  sectionMm2: 95 | 150 | 240 | 300 | 400;
+  ruralCostPerKm: number;
+  urbanCostPerKm: number;
 };
 
 export type RegionalQuotePart = {
@@ -9,11 +12,23 @@ export type RegionalQuotePart = {
   quotePartPerMw: number;
 };
 
-export const defaultCableAssumptions: CableAssumption[] = [
-  { id: "hvac", label: "HVAC overhead line", costPerKm: 0 },
-  { id: "hvac-underground", label: "HVAC underground cable", costPerKm: 0 },
-  { id: "hvdc", label: "HVDC cable", costPerKm: 0 },
+const cableSections = [95, 150, 240, 300, 400] as const;
+const cableMaterials = [
+  { key: "alu", label: "Aluminium", value: "Aluminium" as const },
+  { key: "cu", label: "Cuivre", value: "Cuivre" as const },
 ];
+
+export const defaultCableAssumptions: CableAssumption[] = cableMaterials.flatMap(
+  ({ key, label, value: material }) =>
+    cableSections.map((sectionMm2) => ({
+      id: `mt-${key}-${sectionMm2}`,
+      label: `MT ${sectionMm2} mm² ${label}`,
+      material,
+      sectionMm2,
+      ruralCostPerKm: 0,
+      urbanCostPerKm: 0,
+    })),
+);
 
 export const defaultRegionalQuoteParts: RegionalQuotePart[] = [
   "Auvergne-Rhône-Alpes",

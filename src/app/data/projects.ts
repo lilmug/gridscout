@@ -1,5 +1,18 @@
 export type ProjectStatus = "Screening" | "In progress" | "On hold";
 
+export type GridCapexScenario = {
+  id: string;
+  name: string;
+  distanceKm: number;
+  connectionCapacityMw: number;
+  cableId: string;
+  connectionRegion: string;
+  ruralPercentage: number;
+  urbanPercentage: number;
+  gridCapexEstimate?: number;
+  selectedSubstationCode?: string;
+};
+
 export type Project = {
   id: number;
   name: string;
@@ -21,6 +34,7 @@ export type Project = {
   notes?: string;
   gridCapexEstimate?: number;
   locationSelected?: boolean;
+  scenarios?: GridCapexScenario[];
 };
 
 export const initialProjects: Project[] = [
