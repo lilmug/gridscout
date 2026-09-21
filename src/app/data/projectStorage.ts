@@ -54,5 +54,6 @@ export async function saveProject(project: Project) {
     } catch (fallbackError) {
       console.error("Unable to save local project fallback.", fallbackError);
     }
+    throw error;
   }
 }

@@ -4,7 +4,6 @@ export type CableAssumption = {
   material: "Aluminium" | "Cuivre";
   sectionMm2: 95 | 150 | 240 | 300 | 400;
   ruralCostPerKm: number;
-  urbanCostPerKm: number;
 };
 
 export type RegionalQuotePart = {
@@ -26,7 +25,6 @@ export const defaultCableAssumptions: CableAssumption[] = cableMaterials.flatMap
       material,
       sectionMm2,
       ruralCostPerKm: 0,
-      urbanCostPerKm: 0,
     })),
 );
 

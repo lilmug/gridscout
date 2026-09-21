@@ -47,7 +47,8 @@ export default function AdminPage() {
         <h1 className="mt-2 text-4xl font-semibold tracking-tight">CAPEX assumptions</h1>
         <p className="mt-3 max-w-2xl text-slate-600">
           Configure les coûts des câbles moyenne tension par section et matériau,
-          séparément pour les parcours ruraux et urbains.
+          en coût rural. Le coût urbain est automatiquement calculé avec un
+          coefficient de 1,5.
         </p>
         {saved && <p className="mt-5 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">Assumptions saved for this session.</p>}
 
@@ -62,8 +63,8 @@ export default function AdminPage() {
                 <tr>
                   <th className="px-6 py-4 font-medium">Câble</th>
                   <th className="px-6 py-4 font-medium">Section</th>
-                  <th className="px-6 py-4 font-medium">Rural (€/km)</th>
-                  <th className="px-6 py-4 font-medium">Urbain (€/km)</th>
+                  <th className="px-6 py-4 font-medium">Coût rural (€/km)</th>
+                  <th className="px-6 py-4 font-medium">Coût urbain calculé</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -84,18 +85,8 @@ export default function AdminPage() {
                         aria-label={`${cable.label} rural`}
                       />
                     </td>
-                    <td className="px-6 py-3">
-                      <input
-                        type="number"
-                        min="0"
-                        step="1000"
-                        value={cable.urbanCostPerKm}
-                        onChange={(event) => setCables((current) => current.map((item) => item.id === cable.id
-                          ? { ...item, urbanCostPerKm: Number(event.target.value) }
-                          : item))}
-                        className="form-input mt-0 max-w-48"
-                        aria-label={`${cable.label} urbain`}
-                      />
+                    <td className="px-6 py-3 text-slate-600">
+                      {(cable.ruralCostPerKm * 1.5).toLocaleString("fr-FR")} €/km
                     </td>
                   </tr>
                 ))}

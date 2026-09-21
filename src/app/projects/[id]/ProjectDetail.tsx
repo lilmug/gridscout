@@ -29,6 +29,7 @@ function createScenario(project: Project, index = 1): GridCapexScenario {
     urbanPercentage: 50,
     gridCapexEstimate: project.gridCapexEstimate,
     selectedSubstationCode: project.selectedSubstationCode,
+    projectedConnectionDate: undefined,
   };
 }
 
@@ -79,12 +80,12 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
   const quotePartCost = (selectedQuotePart?.quotePartPerMw ?? 0) * (activeScenario?.connectionCapacityMw ?? 0);
   const cableCost =
     (selectedCable?.ruralCostPerKm ?? 0) * ruralDistance +
-    (selectedCable?.urbanCostPerKm ?? 0) * urbanDistance;
+    (selectedCable?.ruralCostPerKm ?? 0) * 1.5 * urbanDistance;
   const totalCapex = quotePartCost + cableCost;
   const assumptionsConfigured = Boolean(
     selectedQuotePart?.quotePartPerMw &&
     selectedCable?.ruralCostPerKm &&
-    selectedCable.urbanCostPerKm,
+    selectedCable.ruralCostPerKm,
   );
 
   function updateActiveScenario(patch: Partial<GridCapexScenario>) {
@@ -101,7 +102,7 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
           gridCapexEstimate:
             (quotePart?.quotePartPerMw ?? 0) * updated.connectionCapacityMw +
             (cable?.ruralCostPerKm ?? 0) * ruralDistanceKm +
-            (cable?.urbanCostPerKm ?? 0) * urbanDistanceKm,
+            (cable?.ruralCostPerKm ?? 0) * 1.5 * urbanDistanceKm,
         };
       });
       const updatedScenario = next.find((scenario) => scenario.id === activeScenario.id);
@@ -222,16 +223,31 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
       developer: String(formData.get("developer")),
       department: String(formData.get("department")),
       targetCommissioningDate: String(formData.get("targetCommissioningDate")),
+      targetAuthorizationDate: String(formData.get("targetAuthorizationDate")),
       gridVoltage: String(formData.get("gridVoltage")),
       landStatus: String(formData.get("landStatus")),
       notes: String(formData.get("notes")),
     };
-    setProject(updated);
-    updateActiveScenario({ connectionRegion: updated.connectionRegion });
-    persistProject(updated);
+    const updatedWithScenario = {
+      ...updated,
+      scenarios: scenarios.map((scenario) =>
+        scenario.id === activeScenario.id
+          ? { ...scenario, connectionRegion: updated.connectionRegion }
+          : scenario,
+      ),
+    };
+    setProject(updatedWithScenario);
+    setScenarios(updatedWithScenario.scenarios);
+    void persistProject(updatedWithScenario)
+      .then(() => {
+        setSaved(true);
+        window.setTimeout(() => setSaved(false), 2500);
+      })
+      .catch((error: unknown) => {
+        console.error("Unable to save project details.", error);
+        setRouteError("Impossible d’enregistrer le projet dans la base de données.");
+      });
     setIsEditing(false);
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 2500);
   }
 
   return (
@@ -269,6 +285,7 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
               <label className="text-sm font-medium text-slate-700">Developer<input name="developer" defaultValue={project.developer ?? ""} className="form-input" /></label>
               <label className="text-sm font-medium text-slate-700">Department<input name="department" defaultValue={project.department ?? ""} className="form-input" /></label>
               <label className="text-sm font-medium text-slate-700">Target commissioning<input type="date" name="targetCommissioningDate" defaultValue={project.targetCommissioningDate ?? ""} className="form-input" /></label>
+              <label className="text-sm font-medium text-slate-700">Authorization expected<input type="date" name="targetAuthorizationDate" defaultValue={project.targetAuthorizationDate ?? ""} className="form-input" /></label>
               <label className="text-sm font-medium text-slate-700">Grid voltage<input name="gridVoltage" defaultValue={project.gridVoltage ?? ""} placeholder="e.g. 63 kV" className="form-input" /></label>
               <label className="text-sm font-medium text-slate-700">Land status<select name="landStatus" defaultValue={project.landStatus ?? ""} className="form-input"><option value="">Select status</option><option>Secured</option><option>Under option</option><option>To be secured</option></select></label>
               <label className="text-sm font-medium text-slate-700">Status<select name="status" defaultValue={project.status} className="form-input"><option>Screening</option><option>In progress</option><option>On hold</option></select></label>
@@ -288,6 +305,7 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
             <dl className="mt-5 divide-y divide-slate-100 text-sm">
               <div className="flex justify-between py-3"><dt className="text-slate-500">Technology</dt><dd className="font-medium">{project.technology}</dd></div>
               <div className="flex justify-between py-3"><dt className="text-slate-500">Capacity</dt><dd className="font-medium">{project.capacity} MW</dd></div>
+              <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Authorization expected</dt><dd className="text-right font-medium">{project.targetAuthorizationDate || "Not specified"}</dd></div>
               <div className="flex justify-between py-3"><dt className="text-slate-500">Selected RTE post</dt><dd className="max-w-[150px] text-right font-medium">{selectedSubstation?.name ?? "Not selected"}</dd></div>
               <div className="flex justify-between py-3"><dt className="text-slate-500">Road distance</dt><dd className="font-medium">{(activeScenario?.distanceKm ?? 0) > 0 ? `${activeScenario?.distanceKm} km` : "Not calculated"}</dd></div>
               <div className="flex justify-between gap-4 py-3"><dt className="text-slate-500">Coordinates</dt><dd className="text-right font-medium">{coordinates[1].toFixed(5)}, {coordinates[0].toFixed(5)}</dd></div>
@@ -333,10 +351,11 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
           <div className="mt-5 grid gap-5 md:grid-cols-2">
             <label className="text-sm font-medium text-slate-700">Part rurale (%)<input type="number" min="0" max="100" step="1" value={activeScenario?.ruralPercentage ?? 0} onChange={(event) => changeRuralPercentage(Number(event.target.value))} className="form-input" /></label>
             <label className="text-sm font-medium text-slate-700">Part urbaine (%)<input type="number" min="0" max="100" step="1" value={activeScenario?.urbanPercentage ?? 0} onChange={(event) => changeRuralPercentage(100 - Number(event.target.value))} className="form-input" /></label>
+            <label className="text-sm font-medium text-slate-700">Raccordement disponible prévu<input type="date" value={activeScenario?.projectedConnectionDate ?? ""} onChange={(event) => updateActiveScenario({ projectedConnectionDate: event.target.value })} className="form-input" /></label>
           </div>
           {selectedSubstation && <p className="mt-4 text-sm text-slate-600">Selected post: <strong>{selectedSubstation.name}</strong>{selectedSubstation.remainingCapacityMw !== null && ` · ${selectedSubstation.remainingCapacityMw} MW remaining capacity`}{routeStatus === "loading" && " · calculating road route…"}</p>}
           {routeStatus === "error" && <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800">{routeError}</p>}
-          <div className="mt-6 grid gap-3 border-t border-slate-100 pt-5 text-sm md:grid-cols-3"><div><p className="text-slate-500">Quote-part contribution</p><p className="mt-1 font-semibold">{euro.format(quotePartCost)}</p></div><div><p className="text-slate-500">Cable contribution</p><p className="mt-1 font-semibold">{euro.format(cableCost)}</p></div><div><p className="text-slate-500">Applied assumptions</p><p className="mt-1 font-semibold">{selectedQuotePart?.quotePartPerMw ?? 0} €/MW · {selectedCable?.ruralCostPerKm ?? 0} €/km rural · {selectedCable?.urbanCostPerKm ?? 0} €/km urbain</p></div></div>
+          <div className="mt-6 grid gap-3 border-t border-slate-100 pt-5 text-sm md:grid-cols-3"><div><p className="text-slate-500">Quote-part contribution</p><p className="mt-1 font-semibold">{euro.format(quotePartCost)}</p></div><div><p className="text-slate-500">Cable contribution</p><p className="mt-1 font-semibold">{euro.format(cableCost)}</p></div><div><p className="text-slate-500">Applied assumptions</p><p className="mt-1 font-semibold">{selectedQuotePart?.quotePartPerMw ?? 0} €/MW · {selectedCable?.ruralCostPerKm ?? 0} €/km rural · coefficient urbain 1,5x</p></div></div>
         </section>
       </div>
     </main>

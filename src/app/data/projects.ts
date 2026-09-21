@@ -9,6 +9,7 @@ export type GridCapexScenario = {
   connectionRegion: string;
   ruralPercentage: number;
   urbanPercentage: number;
+  projectedConnectionDate?: string;
   gridCapexEstimate?: number;
   selectedSubstationCode?: string;
 };
@@ -29,6 +30,7 @@ export type Project = {
   developer?: string;
   department?: string;
   targetCommissioningDate?: string;
+  targetAuthorizationDate?: string;
   gridVoltage?: string;
   landStatus?: string;
   notes?: string;
