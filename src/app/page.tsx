@@ -28,8 +28,8 @@ export default function Home() {
   // The browser storage is loaded after hydration so the server-rendered shell stays stable.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setProjects(loadProjects());
-    const refreshProjects = () => setProjects(loadProjects());
+    void loadProjects().then(setProjects);
+    const refreshProjects = () => void loadProjects().then(setProjects);
     window.addEventListener(PROJECTS_CHANGED_EVENT, refreshProjects);
     window.addEventListener("focus", refreshProjects);
     return () => {
@@ -56,7 +56,7 @@ export default function Home() {
     };
 
     setProjects((currentProjects) => [project, ...currentProjects]);
-    saveProject(project);
+    void saveProject(project);
     event.currentTarget.reset();
     setIsFormOpen(false);
   }

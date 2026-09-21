@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
-  CABLE_ASSUMPTIONS_KEY,
-  QUOTE_PARTS_KEY,
   loadAssumptions,
+  saveAssumptions,
 } from "@/app/data/assumptionStorage";
 import type { CableAssumption, RegionalQuotePart } from "@/app/data/assumptions";
 import { defaultCableAssumptions, defaultRegionalQuoteParts } from "@/app/data/assumptions";
@@ -17,17 +16,22 @@ export default function AdminPage() {
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    const assumptions = loadAssumptions();
-    setCables(assumptions.cables);
-    setQuoteParts(assumptions.quoteParts);
+    void loadAssumptions().then((assumptions) => {
+      setCables(assumptions.cables);
+      setQuoteParts(assumptions.quoteParts);
+    });
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   function save() {
-    window.localStorage.setItem(CABLE_ASSUMPTIONS_KEY, JSON.stringify(cables));
-    window.localStorage.setItem(QUOTE_PARTS_KEY, JSON.stringify(quoteParts));
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 2500);
+    void saveAssumptions({ cables, quoteParts })
+      .then(() => {
+        setSaved(true);
+        window.setTimeout(() => setSaved(false), 2500);
+      })
+      .catch((error: unknown) => {
+        console.error("Unable to save shared assumptions.", error);
+      });
   }
 
   return (

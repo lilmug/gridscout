@@ -56,17 +56,18 @@ export default function ProjectDetail({ initialProject }: ProjectDetailProps) {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     // The browser storage is loaded after hydration so the server-rendered shell stays stable.
-    const stored = loadProjects().find((item) => item.id === initialProject.id);
-    if (stored) {
+    void Promise.all([loadProjects(), loadAssumptions()]).then(([projects, assumptions]) => {
+      const stored = projects.find((item) => item.id === initialProject.id);
+      if (stored) {
       setProject(stored);
       setCoordinates(stored.coordinates);
       const storedScenarios = stored.scenarios ?? [createScenario(stored)];
       setScenarios(storedScenarios);
       setActiveScenarioId(storedScenarios[0].id);
-    }
-    const assumptions = loadAssumptions();
-    setCables(assumptions.cables);
-    setQuoteParts(assumptions.quoteParts);
+      }
+      setCables(assumptions.cables);
+      setQuoteParts(assumptions.quoteParts);
+    });
   }, [initialProject.id]);
   /* eslint-enable react-hooks/set-state-in-effect */
 

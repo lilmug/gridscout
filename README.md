@@ -1,5 +1,15 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Shared Neon database
+
+The application stores projects and CAPEX assumptions in Neon through the
+`/api/projects` and `/api/assumptions` route handlers. Configure the
+`DATABASE_URL` environment variable in Render, then run the SQL in
+[`schema.sql`](./schema.sql) once in the Neon SQL Editor.
+
+For local development, copy [`.env.example`](./.env.example) to `.env.local`
+and replace the placeholder with the Neon connection string.
+
 ## Getting Started
 
 First, run the development server:
